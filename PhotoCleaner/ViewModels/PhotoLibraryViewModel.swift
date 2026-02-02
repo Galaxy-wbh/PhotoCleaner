@@ -329,6 +329,17 @@ final class PhotoLibraryViewModel: ObservableObject {
         showToast(message: "已将 \(selectedCount) 张照片加入待删除", actionTitle: nil, action: nil, duration: 2.5, clearUndo: true)
     }
 
+    /// 从待删除列表中移除单个照片
+    func removeFromPendingDelete(assetID: String) {
+        pendingDeleteIDs.removeAll { $0 == assetID }
+        pendingStore.save(pendingDeleteIDs)
+
+        // 重新加载照片列表，将移除的照片加回来
+        loadAssets()
+
+        showToast(message: "已从待删除列表移除", actionTitle: nil, action: nil, duration: 2.0, clearUndo: true)
+    }
+
     private func showToast(message: String, actionTitle: String?, action: (() -> Void)?, duration: TimeInterval, clearUndo: Bool) {
         toastTask?.cancel()
         let model = ToastModel(message: message, actionTitle: actionTitle, action: action)

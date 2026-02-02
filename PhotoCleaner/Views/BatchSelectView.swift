@@ -46,7 +46,7 @@ struct BatchSelectView: View {
                 }
             }
         }
-        .sheet(isPresented: $viewModel.showDeleteSheet) {
+        .fullScreenCover(isPresented: $viewModel.showDeleteSheet) {
             DeleteConfirmView(viewModel: viewModel)
         }
         .alert(item: $viewModel.alert) { model in
@@ -185,11 +185,24 @@ struct BatchSelectView: View {
 
     private var bottomBar: some View {
         VStack(spacing: 12) {
-            // 待删除计数
+            // 待删除计数（可点击进入列表）
             HStack {
-                Text(viewModel.pendingCountText)
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.7))
+                Button {
+                    if !viewModel.pendingDeleteIDs.isEmpty {
+                        viewModel.showDeleteSheet = true
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(viewModel.pendingCountText)
+                            .font(.subheadline)
+                        if !viewModel.pendingDeleteIDs.isEmpty {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12))
+                        }
+                    }
+                    .foregroundColor(viewModel.pendingDeleteIDs.isEmpty ? .white.opacity(0.5) : .white.opacity(0.9))
+                }
+                .disabled(viewModel.pendingDeleteIDs.isEmpty)
                 Spacer()
             }
 
@@ -241,9 +254,13 @@ struct BatchPhotoCell: View {
 
     @State private var thumbnail: UIImage?
 
+    private var isLivePhoto: Bool {
+        asset.mediaSubtypes.contains(.photoLive)
+    }
+
     var body: some View {
         GeometryReader { geometry in
-            ZStack(alignment: .topTrailing) {
+            ZStack {
                 // 缩略图
                 if let image = thumbnail {
                     Image(uiImage: image)
@@ -264,23 +281,43 @@ struct BatchPhotoCell: View {
                         .frame(width: geometry.size.width, height: geometry.size.width)
                 }
 
-                // 勾选圆圈
-                ZStack {
-                    Circle()
-                        .stroke(Color.white, lineWidth: 2)
-                        .frame(width: 24, height: 24)
-
-                    if isSelected {
-                        Circle()
-                            .fill(Color.blue)
-                            .frame(width: 24, height: 24)
-
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.white)
+                // Live Photo 标识（左上角）
+                if isLivePhoto {
+                    VStack {
+                        HStack {
+                            LivePhotoBadge()
+                                .padding(4)
+                            Spacer()
+                        }
+                        Spacer()
                     }
+                    .frame(width: geometry.size.width, height: geometry.size.width)
                 }
-                .padding(6)
+
+                // 勾选圆圈（右上角）
+                VStack {
+                    HStack {
+                        Spacer()
+                        ZStack {
+                            Circle()
+                                .stroke(Color.white, lineWidth: 2)
+                                .frame(width: 24, height: 24)
+
+                            if isSelected {
+                                Circle()
+                                    .fill(Color.blue)
+                                    .frame(width: 24, height: 24)
+
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        .padding(6)
+                    }
+                    Spacer()
+                }
+                .frame(width: geometry.size.width, height: geometry.size.width)
             }
             .contentShape(Rectangle())
             .onTapGesture(count: 2) {
@@ -313,6 +350,26 @@ struct BatchPhotoCell: View {
                 thumbnail = image
             }
         }
+    }
+}
+
+// MARK: - Live Photo 标识组件
+
+struct LivePhotoBadge: View {
+    var body: some View {
+        HStack(spacing: 2) {
+            Image(systemName: "livephoto")
+                .font(.system(size: 10, weight: .semibold))
+            Text("LIVE")
+                .font(.system(size: 9, weight: .semibold))
+        }
+        .foregroundColor(.white)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
+        .background(
+            Capsule()
+                .fill(Color.black.opacity(0.5))
+        )
     }
 }
 
