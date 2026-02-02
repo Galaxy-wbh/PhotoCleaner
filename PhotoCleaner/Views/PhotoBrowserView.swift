@@ -110,12 +110,27 @@ struct PhotoBrowserView: View {
         let verticalThreshold = size.height * 0.15
         let translation = value.translation
 
+        // 向上滑动 - 加入待删除
         if abs(translation.height) > abs(translation.width), translation.height < -verticalThreshold {
             withAnimation(.easeIn(duration: 0.2)) {
                 dragOffset = CGSize(width: 0, height: -size.height)
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 viewModel.markCurrentForDeletion()
+                withAnimation(.none) {
+                    dragOffset = .zero
+                }
+            }
+            return
+        }
+
+        // 向下滑动 - 进入批量选择模式
+        if abs(translation.height) > abs(translation.width), translation.height > verticalThreshold {
+            withAnimation(.easeOut(duration: 0.3)) {
+                dragOffset = CGSize(width: 0, height: size.height)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                viewModel.enterBatchMode()
                 withAnimation(.none) {
                     dragOffset = .zero
                 }

@@ -2,6 +2,11 @@ import Photos
 import SwiftUI
 import UIKit
 
+enum BrowseMode {
+    case single   // 单张模式
+    case batch    // 批量选择模式
+}
+
 @MainActor
 final class PhotoLibraryViewModel: ObservableObject {
     @Published private(set) var authorizationStatus: PHAuthorizationStatus
@@ -12,6 +17,11 @@ final class PhotoLibraryViewModel: ObservableObject {
     @Published var alert: AlertModel?
     @Published var showDeleteSheet = false
     @Published var isDeleting = false
+
+    // 批量选择模式相关
+    @Published var browseMode: BrowseMode = .single
+    @Published private(set) var batchSelectedIDs: Set<String> = []
+    private var entryIndex: Int = 0  // 进入批量模式时的索引
 
     private let pendingStore = PendingDeleteStore()
     private var undoState: UndoState?
@@ -56,6 +66,10 @@ final class PhotoLibraryViewModel: ObservableObject {
 
     var hasPhotos: Bool {
         !assets.isEmpty
+    }
+
+    var batchSelectedCountText: String {
+        "已选择 \(batchSelectedIDs.count) 张"
     }
 
     var isAtFirstPhoto: Bool {
@@ -231,6 +245,78 @@ final class PhotoLibraryViewModel: ObservableObject {
     func showBoundaryToast(isLast: Bool) {
         let message = isLast ? "已经是最后一张照片" : "已经是第一张照片"
         showToast(message: message, actionTitle: nil, action: nil, duration: 1.5, clearUndo: true)
+    }
+
+    // MARK: - 批量选择模式
+
+    func enterBatchMode() {
+        entryIndex = currentIndex
+        batchSelectedIDs.removeAll()
+        browseMode = .batch
+    }
+
+    func exitBatchMode(toAssetID: String? = nil) {
+        browseMode = .single
+        if let assetID = toAssetID,
+           let index = assets.firstIndex(where: { $0.localIdentifier == assetID }) {
+            currentIndex = index
+        } else {
+            // 返回进入时的位置，如果位置已失效则保持在有效范围内
+            currentIndex = min(entryIndex, max(assets.count - 1, 0))
+        }
+        batchSelectedIDs.removeAll()
+    }
+
+    func toggleBatchSelection(for assetID: String) {
+        if batchSelectedIDs.contains(assetID) {
+            batchSelectedIDs.remove(assetID)
+        } else {
+            batchSelectedIDs.insert(assetID)
+        }
+    }
+
+    func addToBatchSelection(_ assetID: String) {
+        batchSelectedIDs.insert(assetID)
+    }
+
+    func isBatchSelected(_ assetID: String) -> Bool {
+        batchSelectedIDs.contains(assetID)
+    }
+
+    func selectAllForBatch() {
+        batchSelectedIDs = Set(assets.map { $0.localIdentifier })
+    }
+
+    func deselectAllForBatch() {
+        batchSelectedIDs.removeAll()
+    }
+
+    var isAllSelectedForBatch: Bool {
+        !assets.isEmpty && batchSelectedIDs.count == assets.count
+    }
+
+    func markBatchSelectedForDeletion() {
+        guard !batchSelectedIDs.isEmpty else { return }
+
+        let selectedCount = batchSelectedIDs.count
+        for assetID in batchSelectedIDs {
+            if !pendingDeleteIDs.contains(assetID) {
+                pendingDeleteIDs.append(assetID)
+            }
+        }
+        pendingStore.save(pendingDeleteIDs)
+
+        // 从 assets 中移除已选中的照片
+        assets.removeAll { batchSelectedIDs.contains($0.localIdentifier) }
+
+        // 调整 currentIndex
+        if currentIndex >= assets.count {
+            currentIndex = max(assets.count - 1, 0)
+        }
+
+        batchSelectedIDs.removeAll()
+
+        showToast(message: "已将 \(selectedCount) 张照片加入待删除", actionTitle: nil, action: nil, duration: 2.5, clearUndo: true)
     }
 
     private func showToast(message: String, actionTitle: String?, action: (() -> Void)?, duration: TimeInterval, clearUndo: Bool) {

@@ -12,7 +12,12 @@ struct ContentView: View {
                     viewModel.requestAuthorization()
                 })
             case .authorized, .limited:
-                PhotoBrowserView(viewModel: viewModel)
+                switch viewModel.browseMode {
+                case .single:
+                    PhotoBrowserView(viewModel: viewModel)
+                case .batch:
+                    BatchSelectView(viewModel: viewModel)
+                }
             case .denied, .restricted:
                 PermissionDeniedView(onOpenSettings: {
                     viewModel.openSettings()
