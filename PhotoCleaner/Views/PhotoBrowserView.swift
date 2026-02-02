@@ -4,6 +4,11 @@ import SwiftUI
 struct PhotoBrowserView: View {
     @ObservedObject var viewModel: PhotoLibraryViewModel
     @State private var dragOffset: CGSize = .zero
+    @State private var isShowingLivePhoto: Bool = false
+
+    private var currentIsLivePhoto: Bool {
+        viewModel.currentAsset?.mediaSubtypes.contains(.photoLive) == true
+    }
 
     var body: some View {
         ZStack {
@@ -11,7 +16,19 @@ struct PhotoBrowserView: View {
 
             if viewModel.hasPhotos {
                 GeometryReader { proxy in
-                    swipeStack(in: proxy.size)
+                    ZStack {
+                        swipeStack(in: proxy.size)
+
+                        // Live Photo 播放叠加层
+                        if isShowingLivePhoto, let asset = viewModel.currentAsset {
+                            LivePhotoOverlay(
+                                asset: asset,
+                                targetSize: proxy.size,
+                                isShowing: $isShowingLivePhoto
+                            )
+                            .transition(.opacity)
+                        }
+                    }
                 }
             } else {
                 EmptyStateView()
@@ -64,7 +81,7 @@ struct PhotoBrowserView: View {
                 }
             }
         }
-        .sheet(isPresented: $viewModel.showDeleteSheet) {
+        .fullScreenCover(isPresented: $viewModel.showDeleteSheet) {
             DeleteConfirmView(viewModel: viewModel)
         }
         .alert(item: $viewModel.alert) { model in
@@ -82,14 +99,47 @@ struct PhotoBrowserView: View {
             }
 
             if let current = viewModel.currentAsset {
-                PhotoAssetImageView(asset: current, targetSize: size)
-                    .offset(dragOffset)
+                ZStack {
+                    PhotoAssetImageView(asset: current, targetSize: size)
+
+                    // Live Photo 标识（左上角）
+                    if currentIsLivePhoto {
+                        VStack {
+                            HStack {
+                                LivePhotoBadge()
+                                    .padding(.leading, 16)
+                                    .padding(.top, 60)
+                                Spacer()
+                            }
+                            Spacer()
+                        }
+                    }
+                }
+                .offset(dragOffset)
             }
 
             if let next = viewModel.nextAsset {
                 PhotoAssetImageView(asset: next, targetSize: size)
                     .offset(x: size.width + dragOffset.width)
                     .opacity(0.6)
+            }
+
+            // 长按手势检测层（仅当是 Live Photo 时才启用）
+            if currentIsLivePhoto {
+                LongPressGestureView(
+                    minimumDuration: 0.3,
+                    onBegan: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isShowingLivePhoto = true
+                        }
+                    },
+                    onEnded: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isShowingLivePhoto = false
+                        }
+                    }
+                )
+                .allowsHitTesting(!isShowingLivePhoto)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
