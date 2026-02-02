@@ -6,9 +6,11 @@ import UIKit
 final class ImageCache {
     static let shared = ImageCache()
     private var cache = NSCache<NSString, UIImage>()
+    private let imageManager = PHCachingImageManager()
 
     private init() {
-        cache.countLimit = 30
+        cache.countLimit = 100  // 增大缓存容量
+        cache.totalCostLimit = 200 * 1024 * 1024  // 200MB
     }
 
     func image(for key: String) -> UIImage? {
@@ -17,6 +19,36 @@ final class ImageCache {
 
     func setImage(_ image: UIImage, for key: String) {
         cache.setObject(image, forKey: key as NSString)
+    }
+
+    /// 预加载指定照片的高清图片到缓存
+    func preloadImage(for asset: PHAsset, targetSize: CGSize) {
+        let assetID = asset.localIdentifier
+
+        // 已在缓存中则跳过
+        if image(for: assetID) != nil {
+            return
+        }
+
+        let options = PHImageRequestOptions()
+        options.deliveryMode = .highQualityFormat
+        options.resizeMode = .fast
+        options.isSynchronous = false
+        options.isNetworkAccessAllowed = true
+
+        let scale = UIScreen.main.scale
+        let size = CGSize(width: targetSize.width * scale, height: targetSize.height * scale)
+
+        imageManager.requestImage(
+            for: asset,
+            targetSize: size,
+            contentMode: .aspectFit,
+            options: options
+        ) { [weak self] image, _ in
+            if let image {
+                self?.setImage(image, for: assetID)
+            }
+        }
     }
 }
 

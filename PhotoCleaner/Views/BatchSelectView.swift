@@ -6,6 +6,7 @@ struct BatchSelectView: View {
     @State private var cellFrames: [String: CGRect] = [:]
     @State private var dragSelectMode: Bool? = nil  // true = 选中模式, false = 取消选中模式, nil = 未开始
     @State private var dragProcessedIDs: Set<String> = []  // 当前滑动已处理的照片ID
+    @State private var isGridReady = false  // 网格是否已定位完成
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 4)
 
@@ -99,6 +100,8 @@ struct BatchSelectView: View {
                                     viewModel.toggleBatchSelection(for: asset.localIdentifier)
                                 },
                                 onDoubleTap: {
+                                    // 先预加载高清图片，再退出批量模式
+                                    ImageCache.shared.preloadImage(for: asset, targetSize: geometry.size)
                                     viewModel.exitBatchMode(toAssetID: asset.localIdentifier)
                                 }
                             )
@@ -130,14 +133,22 @@ struct BatchSelectView: View {
                             dragProcessedIDs.removeAll()
                         }
                 )
+                .opacity(isGridReady ? 1 : 0)
                 .onAppear {
-                    // 进入批量模式时滚动到当前照片位置
+                    // 进入批量模式时立即滚动到当前照片位置（无动画）
                     if let entryAssetID = viewModel.entryAssetID {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            withAnimation {
-                                scrollProxy.scrollTo(entryAssetID, anchor: .center)
+                        // 使用 DispatchQueue 确保 ScrollView 已经渲染
+                        DispatchQueue.main.async {
+                            scrollProxy.scrollTo(entryAssetID, anchor: .center)
+                            // 滚动完成后显示网格
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                withAnimation(.easeIn(duration: 0.15)) {
+                                    isGridReady = true
+                                }
                             }
                         }
+                    } else {
+                        isGridReady = true
                     }
                 }
             }
