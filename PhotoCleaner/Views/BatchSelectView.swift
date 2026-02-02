@@ -4,7 +4,8 @@ import SwiftUI
 struct BatchSelectView: View {
     @ObservedObject var viewModel: PhotoLibraryViewModel
     @State private var cellFrames: [String: CGRect] = [:]
-    @GestureState private var isDragging = false
+    @State private var dragSelectMode: Bool? = nil  // true = 选中模式, false = 取消选中模式, nil = 未开始
+    @State private var dragProcessedIDs: Set<String> = []  // 当前滑动已处理的照片ID
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 4)
 
@@ -87,51 +88,85 @@ struct BatchSelectView: View {
 
     private var photoGrid: some View {
         GeometryReader { geometry in
-            ScrollView {
-                LazyVGrid(columns: columns, spacing: 2) {
-                    ForEach(viewModel.assets, id: \.localIdentifier) { asset in
-                        BatchPhotoCell(
-                            asset: asset,
-                            isSelected: viewModel.isBatchSelected(asset.localIdentifier),
-                            onTap: {
-                                viewModel.toggleBatchSelection(for: asset.localIdentifier)
-                            },
-                            onDoubleTap: {
-                                viewModel.exitBatchMode(toAssetID: asset.localIdentifier)
+            ScrollViewReader { scrollProxy in
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 2) {
+                        ForEach(viewModel.assets, id: \.localIdentifier) { asset in
+                            BatchPhotoCell(
+                                asset: asset,
+                                isSelected: viewModel.isBatchSelected(asset.localIdentifier),
+                                onTap: {
+                                    viewModel.toggleBatchSelection(for: asset.localIdentifier)
+                                },
+                                onDoubleTap: {
+                                    viewModel.exitBatchMode(toAssetID: asset.localIdentifier)
+                                }
+                            )
+                            .id(asset.localIdentifier)
+                            .background(
+                                GeometryReader { cellGeometry in
+                                    Color.clear.preference(
+                                        key: CellFramePreferenceKey.self,
+                                        value: [asset.localIdentifier: cellGeometry.frame(in: .named("scrollView"))]
+                                    )
+                                }
+                            )
+                        }
+                    }
+                    .padding(2)
+                }
+                .coordinateSpace(name: "scrollView")
+                .onPreferenceChange(CellFramePreferenceKey.self) { frames in
+                    cellFrames = frames
+                }
+                .gesture(
+                    DragGesture(minimumDistance: 10)
+                        .onChanged { value in
+                            handleDragSelection(at: value.location)
+                        }
+                        .onEnded { _ in
+                            // 滑动结束，重置状态
+                            dragSelectMode = nil
+                            dragProcessedIDs.removeAll()
+                        }
+                )
+                .onAppear {
+                    // 进入批量模式时滚动到当前照片位置
+                    if let entryAssetID = viewModel.entryAssetID {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            withAnimation {
+                                scrollProxy.scrollTo(entryAssetID, anchor: .center)
                             }
-                        )
-                        .background(
-                            GeometryReader { cellGeometry in
-                                Color.clear.preference(
-                                    key: CellFramePreferenceKey.self,
-                                    value: [asset.localIdentifier: cellGeometry.frame(in: .named("scrollView"))]
-                                )
-                            }
-                        )
+                        }
                     }
                 }
-                .padding(2)
             }
-            .coordinateSpace(name: "scrollView")
-            .onPreferenceChange(CellFramePreferenceKey.self) { frames in
-                cellFrames = frames
-            }
-            .gesture(
-                DragGesture(minimumDistance: 10)
-                    .updating($isDragging) { _, state, _ in
-                        state = true
-                    }
-                    .onChanged { value in
-                        handleDragSelection(at: value.location)
-                    }
-            )
         }
     }
 
     private func handleDragSelection(at point: CGPoint) {
         for (assetID, frame) in cellFrames {
             if frame.contains(point) {
-                viewModel.addToBatchSelection(assetID)
+                // 如果这个照片已经在本次滑动中处理过，跳过
+                if dragProcessedIDs.contains(assetID) {
+                    break
+                }
+
+                // 第一次触碰照片时，根据该照片的当前状态决定滑动模式
+                if dragSelectMode == nil {
+                    // 如果当前照片已选中，则进入取消选中模式；否则进入选中模式
+                    dragSelectMode = !viewModel.isBatchSelected(assetID)
+                }
+
+                // 根据滑动模式执行选中或取消选中
+                if dragSelectMode == true {
+                    viewModel.addToBatchSelection(assetID)
+                } else {
+                    viewModel.removeFromBatchSelection(assetID)
+                }
+
+                // 记录已处理
+                dragProcessedIDs.insert(assetID)
                 break
             }
         }

@@ -279,6 +279,16 @@ final class PhotoLibraryViewModel: ObservableObject {
         batchSelectedIDs.insert(assetID)
     }
 
+    func removeFromBatchSelection(_ assetID: String) {
+        batchSelectedIDs.remove(assetID)
+    }
+
+    /// 进入批量模式时的当前照片ID，用于ScrollView定位
+    var entryAssetID: String? {
+        guard entryIndex >= 0, entryIndex < assets.count else { return nil }
+        return assets[entryIndex].localIdentifier
+    }
+
     func isBatchSelected(_ assetID: String) -> Bool {
         batchSelectedIDs.contains(assetID)
     }
