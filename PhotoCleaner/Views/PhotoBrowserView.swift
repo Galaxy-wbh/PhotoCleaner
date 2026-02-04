@@ -157,11 +157,14 @@ struct PhotoBrowserView: View {
 
     private func handleSwipe(value: DragGesture.Value, size: CGSize) {
         let horizontalThreshold = size.width * 0.2
-        let verticalThreshold = size.height * 0.15
+        let upThreshold = size.height * 0.18
+        let downThreshold = size.height * 0.25
+        let verticalDominanceRatio: CGFloat = 1.6
         let translation = value.translation
 
         // 向上滑动 - 加入待删除
-        if abs(translation.height) > abs(translation.width), translation.height < -verticalThreshold {
+        if abs(translation.height) > abs(translation.width) * verticalDominanceRatio,
+           translation.height < -upThreshold {
             withAnimation(.easeIn(duration: 0.2)) {
                 dragOffset = CGSize(width: 0, height: -size.height)
             }
@@ -175,7 +178,8 @@ struct PhotoBrowserView: View {
         }
 
         // 向下滑动 - 进入批量选择模式
-        if abs(translation.height) > abs(translation.width), translation.height > verticalThreshold {
+        if abs(translation.height) > abs(translation.width) * verticalDominanceRatio,
+           translation.height > downThreshold {
             withAnimation(.easeOut(duration: 0.3)) {
                 dragOffset = CGSize(width: 0, height: size.height)
             }
